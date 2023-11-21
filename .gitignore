@@ -1,0 +1,8 @@
+.DS_Store
+.idea/
+.envrc
+/sf-data
+/sf.yaml
+/sfbtc
+/localdata
+*.spkg

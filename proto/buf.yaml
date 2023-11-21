@@ -1,0 +1,14 @@
+version: v1
+name: buf.build/streamingfast/firehose-bitcoin
+
+build:
+  excludes:
+  - google
+
+lint:
+  use:
+    - DEFAULT
+
+breaking:
+  use:
+    - FILE

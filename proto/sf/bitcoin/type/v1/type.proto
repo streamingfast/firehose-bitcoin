@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+package sf.bitcoin.type.v1;
+
+option go_package = "github.com/streamingfast/firehose-bitcoin/types/pb/sf/bitcoin/type/v1;pbbtc";
+
+import "google/protobuf/timestamp.proto";
+
+message Block {
+  //the block hash
+  bytes hash = 1;
+
+  // NON-DETERMINISTIC: The number of confirmations, or -1 if the block is not on the main chain
+  // int64 confirmations = 2;
+  // it will be read and reflected indirectly inside the pbbstream.block's LIB
+
+  // The block size
+  int32 size = 3;
+  // The block size excluding witness data
+  int32 stripped_size = 4;
+  // The block weight as defined in BIP 141
+  int32 weight = 5;
+  // The block height or index
+  int64 height = 6;
+  // The block version
+  int32 version = 7;
+  // The block version formatted in hexadecimal
+  string version_hex = 8;
+  // The merkle root
+  string merkle_root = 9;
+  // Transaction array
+  repeated Transaction tx = 10;
+  // The block time expressed in UNIX epoch time
+  int64 time = 11;
+  // The median block time expressed in UNIX epoch time
+  int64 mediantime = 12;
+  // The nonce
+  uint32 nonce = 13;
+  // The bits
+  string bits = 14;
+  // The difficulty
+  double difficulty  = 15;
+  // Expected number of hashes required to produce the chain up to this block (in hex)
+  string chainwork = 16;
+  // The number of transactions in the block
+  uint32 n_tx = 17;
+  // The hash of the previous block
+  string previous_hash  = 18;
+
+  // NON-DETERMINISTIC The hash of the next block
+  // string next_hash  = 19;
+}
+
+message Transaction {
+  // The serialized, hex-encoded data for 'txid'
+  string hex = 1;
+  // The transaction id
+  string txid = 2;
+  // The transaction hash (differs from txid for witness transactions)
+  string hash = 3;
+  // The serialized transaction size
+  int32 size = 4;
+  // The virtual transaction size (differs from size for witness transactions)
+  int32 vsize = 5;
+  // The transaction's weight (between vsize*4-3 and vsize*4)
+  int32 weight = 6;
+  //  The version
+  uint32 version = 7;
+  // The lock time
+  uint32 locktime = 8;
+  repeated Vin vin = 9;
+  repeated Vout vout = 10;
+  // the block hash
+  string blockhash = 11;
+
+  // The block time expressed in UNIX epoch time
+  int64 blocktime = 12;
+
+  // NON-DETERMINISTIC
+  // The confirmations
+  // uint64 confirmations = ;
+
+  // Same as "blocktime"
+  // int64 time = ;
+}
+
+message Vin {
+  // The transaction id
+  string txid = 1;
+  // The output number
+  uint32 vout = 2;
+  // The script
+  ScriptSig script_sig = 3;
+  // The script sequence number
+  uint32 sequence = 4;
+  // hex-encoded witness data (if any)
+  repeated string txinwitness = 5;
+  // hex-encoded coinbase
+  string coinbase = 6;
+}
+
+message Vout {
+  // The value in BTC
+  double value = 1;
+  // index
+  uint32 n = 2;
+  ScriptPubKey script_pubKey = 3;
+}
+
+message ScriptSig {
+  // The asm
+  string asm = 1;
+  // The hex
+  string hex = 2;
+}
+
+message ScriptPubKey {
+  // the asm
+  string asm = 1;
+  // the hex
+  string hex = 2;
+  // The required sigs
+  int32 req_sigs = 3;
+  // The type, eg 'pubkeyhash'
+  string type = 4;
+  // bitcoin address
+  string address = 5;
+  // bitcoin addresses (deprecated, empty when 'address' is set)
+  repeated string addresses = 6;
+}
