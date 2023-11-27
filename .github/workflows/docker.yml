@@ -6,7 +6,6 @@ on:
     tags:
       - "v*"
     branches:
-      - "build"
       - "develop"
       - "release/v*"
       - "feature/*"
