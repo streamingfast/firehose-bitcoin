@@ -1,7 +1,6 @@
 package pbbtc
 
 import (
-	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -39,7 +38,7 @@ func (b *Block) ToBstreamBlock() (*pbbstream.Block, error) {
 
 	return &pbbstream.Block{
 		Number:    blkNum,
-		Id:        hex.EncodeToString(b.Hash),
+		Id:        b.Hash,
 		ParentId:  b.PreviousHash,
 		Timestamp: timestamppb.New(time.Unix(b.Time, 0)),
 		LibNum:    libNum,

@@ -4,12 +4,15 @@ go 1.21.0
 
 require (
 	github.com/btcsuite/btcd v0.23.4
+	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f
 	github.com/spf13/cobra v1.8.0
 	github.com/streamingfast/bstream v0.0.2-0.20231123130020-ad84cce9666d
 	github.com/streamingfast/cli v0.0.4-0.20230825151644-8cc84512cd80
-	github.com/streamingfast/firehose-core v0.2.4-0.20231123151954-5bd6074c6f6d
+	github.com/streamingfast/firehose-core v0.2.4-0.20231127172139-31d5902bc074
 	github.com/streamingfast/logging v0.0.0-20230608130331-f22c91403091
 	github.com/streamingfast/shutter v1.5.0
+	github.com/stretchr/testify v1.8.4
+	github.com/test-go/testify v1.1.4
 	go.uber.org/zap v1.26.0
 	google.golang.org/protobuf v1.31.0
 )
@@ -47,7 +50,6 @@ require (
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
 	github.com/btcsuite/btcd/btcutil v1.1.0 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.1 // indirect
-	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f // indirect
 	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
 	github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792 // indirect
 	github.com/bufbuild/connect-go v1.10.0 // indirect
@@ -172,7 +174,6 @@ require (
 	github.com/streamingfast/sf-tracing v0.0.0-20230616174903-cd2ade641ca9 // indirect
 	github.com/streamingfast/snapshotter v0.0.0-20230316190750-5bcadfde44d0 // indirect
 	github.com/streamingfast/substreams v1.1.21-0.20231122013157-938ec26b0ef6 // indirect
-	github.com/stretchr/testify v1.8.4 // indirect
 	github.com/subosito/gotenv v1.4.2 // indirect
 	github.com/teris-io/shortid v0.0.0-20171029131806-771a37caa5cf // indirect
 	github.com/tetratelabs/wazero v1.1.0 // indirect
@@ -230,3 +231,4 @@ require (
 	sigs.k8s.io/yaml v1.2.0 // indirect
 )
 
+replace github.com/btcsuite/btcd => github.com/streamingfast/btcd v0.0.0-20231127171849-2aa489ba183d

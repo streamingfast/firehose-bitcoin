@@ -8,7 +8,9 @@ import "google/protobuf/timestamp.proto";
 
 message Block {
   //the block hash
-  bytes hash = 1;
+  // Bitcoin core reverses the byte order of the hash when printing it out has Hex, to prevent
+  // the end user from making a mistake we store it as a string directly
+  string hash = 1;
 
   // NON-DETERMINISTIC: The number of confirmations, or -1 if the block is not on the main chain
   // int64 confirmations = 2;

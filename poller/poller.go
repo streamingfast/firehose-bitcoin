@@ -3,7 +3,6 @@ package poller
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/streamingfast/bstream"
@@ -22,17 +21,16 @@ type Reader struct {
 	startBlockNum        uint64
 	rpcClient            *rpcclient.Client
 	logger               *zap.Logger
-	shutter              *shutter.Shutter
 }
 
 func New(endpoint string, blockFetchRetryCount uint64, stateStoragePath string, startBlockNum uint64, logger *zap.Logger) *Reader {
 	return &Reader{
-		shutter:              shutter.New(),
+		Shutter:              shutter.New(),
 		endpoint:             endpoint,
 		blockFetchRetryCount: blockFetchRetryCount,
 		stateStoragePath:     stateStoragePath,
 		startBlockNum:        startBlockNum,
-		logger:               logger.Named("reader"),
+		logger:               logger.Named("poller"),
 	}
 }
 
@@ -55,11 +53,10 @@ func (r *Reader) Run(ctx context.Context) error {
 	})
 
 	connCfg := &rpcclient.ConnConfig{
-		Host: r.endpoint,
-		//User:         "yourrpcuser",
-		//Pass:         "yourrpcpass",
-		HTTPPostMode: true, // Bitcoin core only supports HTTP POST mode
-		DisableTLS:   true, // Bitcoin core does not provide TLS by default
+		Host:         r.endpoint,
+		DisableAuth:  true,
+		HTTPPostMode: true,
+		DisableTLS:   true,
 	}
 
 	client, err := rpcclient.New(connCfg, nil)
@@ -78,17 +75,20 @@ func (r *Reader) Run(ctx context.Context) error {
 	return bp.Run(ctx, r.startBlockNum, finalizedBlk)
 }
 
-func (r *Reader) PollingInterval() time.Duration {
-	return 7 * time.Minute
-}
-
 func (r *Reader) GetFinalizedBlock() (bstream.BlockRef, error) {
 
-	blockHash, blockNum, err := r.rpcClient.GetBestBlock()
+	bestBlockHash, err := r.rpcClient.GetBestBlockHash()
 	if err != nil {
-		return nil, fmt.Errorf("unable to get best block: %w", err)
+		return nil, fmt.Errorf("unable to get best block hash: %w", err)
 	}
-	return bstream.NewBlockRef(blockHash.String(), uint64(blockNum)), nil
+	r.logger.Info("found best block hash", zap.Stringer("blockhash", bestBlockHash))
+
+	bestBlock, err := r.rpcClient.GetBlockVerbose(bestBlockHash)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get best block %s: %w", bestBlockHash.String(), err)
+	}
+
+	return bstream.NewBlockRef(bestBlockHash.String(), uint64(bestBlock.Height)), nil
 }
 
 func (r *Reader) Fetch(_ context.Context, blkNum uint64) (*pbbstream.Block, error) {
@@ -98,15 +98,19 @@ func (r *Reader) Fetch(_ context.Context, blkNum uint64) (*pbbstream.Block, erro
 		return nil, fmt.Errorf("unable to get block hash for block %d: %w", blkNum, err)
 	}
 
-	r.logger.Debug("found block", zap.Uint64("block_num", blkNum))
-
 	rpcBlk, err := r.rpcClient.GetBlockVerboseTx(blkHash)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get block %d (%s): %w", blkNum, blkHash.String(), err)
 	}
 
+	r.logger.Debug("found block",
+		zap.Int64("block_num", rpcBlk.Height),
+		zap.String("block_hash", rpcBlk.Hash),
+		zap.String("prev_hash", rpcBlk.PreviousHash),
+	)
+
 	blk := &pbbitcoin.Block{
-		Hash:         blkHash.CloneBytes(),
+		Hash:         blkHash.String(),
 		Size:         rpcBlk.Size,
 		StrippedSize: rpcBlk.StrippedSize,
 		Weight:       rpcBlk.Weight,
@@ -144,17 +148,23 @@ func (r *Reader) Fetch(_ context.Context, blkNum uint64) (*pbbstream.Block, erro
 		}
 
 		for _, vin := range tx.Vin {
-			trx.Vin = append(trx.Vin, &pbbitcoin.Vin{
-				Txid: vin.Txid,
-				Vout: vin.Vout,
-				ScriptSig: &pbbitcoin.ScriptSig{
-					Asm: vin.ScriptSig.Asm,
-					Hex: vin.ScriptSig.Hex,
-				},
+			pbvin := &pbbitcoin.Vin{
+				Txid:        vin.Txid,
+				Vout:        vin.Vout,
 				Sequence:    vin.Sequence,
 				Txinwitness: vin.Witness,
 				Coinbase:    vin.Coinbase,
-			})
+			}
+
+			if vin.ScriptSig != nil {
+				pbvin.ScriptSig = &pbbitcoin.ScriptSig{
+					Asm: vin.ScriptSig.Asm,
+					Hex: vin.ScriptSig.Hex,
+				}
+			}
+
+			trx.Vin = append(trx.Vin)
+
 		}
 
 		for _, vout := range tx.Vout {
