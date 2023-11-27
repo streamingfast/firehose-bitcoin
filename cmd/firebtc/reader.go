@@ -17,7 +17,7 @@ var readerCmd = &cobra.Command{
 	Short:        "launches the RPC reader",
 	SilenceUsage: true,
 	RunE:         readerRunE,
-	Args:         cobra.ExactArgs(2),
+	Args:         cobra.ExactArgs(1),
 }
 
 func init() {
