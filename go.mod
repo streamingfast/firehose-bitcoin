@@ -8,7 +8,7 @@ require (
 	github.com/spf13/cobra v1.8.0
 	github.com/streamingfast/bstream v0.0.2-0.20231123130020-ad84cce9666d
 	github.com/streamingfast/cli v0.0.4-0.20230825151644-8cc84512cd80
-	github.com/streamingfast/firehose-core v0.2.4-0.20231130001815-1d6f3c31d5e4
+	github.com/streamingfast/firehose-core v0.2.4-0.20231130152151-2e7b9f992f5b
 	github.com/streamingfast/logging v0.0.0-20230608130331-f22c91403091
 	github.com/streamingfast/shutter v1.5.0
 	github.com/stretchr/testify v1.8.4
