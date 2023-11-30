@@ -211,7 +211,7 @@ func (p *Poller) Fetch(_ context.Context, blkNum uint64) (*pbbstream.Block, erro
 				}
 			}
 
-			trx.Vin = append(trx.Vin)
+			trx.Vin = append(trx.Vin, pbvin)
 
 		}
 
