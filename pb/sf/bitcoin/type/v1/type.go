@@ -10,6 +10,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const LibOffset = 6
+
 func (b *Block) MustToBstreamBlock() *pbbstream.Block {
 	blk, err := b.ToBstreamBlock()
 	if err != nil {
@@ -33,7 +35,7 @@ func (b *Block) ToBstreamBlock() (*pbbstream.Block, error) {
 
 	libNum := uint64(0)
 	if blkNum > 6 {
-		libNum = blkNum - 6
+		libNum = blkNum - LibOffset
 	}
 
 	return &pbbstream.Block{

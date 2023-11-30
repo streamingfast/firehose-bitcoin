@@ -3,6 +3,7 @@ package poller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/streamingfast/bstream"
@@ -13,47 +14,58 @@ import (
 	"go.uber.org/zap"
 )
 
-type Reader struct {
+type Poller struct {
 	*shutter.Shutter
 	endpoint             string
 	blockFetchRetryCount uint64
 	stateStoragePath     string
 	startBlockNum        uint64
+	ignoreCursor         bool
+	blockInterval        time.Duration
+	headBlock            bstream.BlockRef
 	rpcClient            *rpcclient.Client
 	logger               *zap.Logger
 }
 
-func New(endpoint string, blockFetchRetryCount uint64, stateStoragePath string, startBlockNum uint64, logger *zap.Logger) *Reader {
-	return &Reader{
+func New(endpoint string, blockFetchRetryCount uint64, stateStoragePath string, startBlockNum uint64, ignoreCursor bool, logger *zap.Logger) *Poller {
+	return &Poller{
 		Shutter:              shutter.New(),
 		endpoint:             endpoint,
 		blockFetchRetryCount: blockFetchRetryCount,
 		stateStoragePath:     stateStoragePath,
 		startBlockNum:        startBlockNum,
+		ignoreCursor:         ignoreCursor,
+		blockInterval:        7 * time.Minute,
 		logger:               logger.Named("poller"),
 	}
 }
 
-func (r *Reader) Run(ctx context.Context) error {
+func (p *Poller) Run(ctx context.Context) error {
 	contentType := getContentType()
-	r.logger.Info("launching firebtc reader",
-		zap.String("endpoint", r.endpoint),
+	p.logger.Info("launching firebtc poller",
+		zap.String("endpoint", p.endpoint),
 		zap.String("content", contentType),
-		zap.Uint64("start_block_num", r.startBlockNum),
+		zap.Uint64("start_block_num", p.startBlockNum),
 	)
 
-	bp := blockpoller.New(r, blockpoller.NewFireBlockHandler(contentType),
-		blockpoller.WithLogger(r.logger),
-		blockpoller.WithBlockFetchRetryCount(r.blockFetchRetryCount),
-		blockpoller.WithStoringState(r.stateStoragePath),
-	)
-	r.OnTerminating(func(err error) {
-		r.logger.Info("shutting down firebtc reader", zap.Error(err))
+	opts := []blockpoller.Option{
+		blockpoller.WithLogger(p.logger),
+		blockpoller.WithBlockFetchRetryCount(p.blockFetchRetryCount),
+		blockpoller.WithStoringState(p.stateStoragePath),
+	}
+
+	if p.ignoreCursor {
+		opts = append(opts, blockpoller.IgnoreCursor())
+	}
+
+	bp := blockpoller.New(p, blockpoller.NewFireBlockHandler(contentType), opts...)
+	p.OnTerminating(func(err error) {
+		p.logger.Info("shutting down firebtc reader", zap.Error(err))
 		bp.Shutdown(nil)
 	})
 
 	connCfg := &rpcclient.ConnConfig{
-		Host:         r.endpoint,
+		Host:         p.endpoint,
 		DisableAuth:  true,
 		HTTPPostMode: true,
 		DisableTLS:   true,
@@ -64,26 +76,43 @@ func (r *Reader) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to setup rpc client: %w", err)
 	}
 	defer client.Shutdown()
-	r.rpcClient = client
+	p.rpcClient = client
 
-	finalizedBlk, err := r.GetFinalizedBlock()
+	p.headBlock, err = p.GetHeadBlock()
+	if err != nil {
+		return fmt.Errorf("failed to get head block: %w", err)
+	}
+
+	finalizedBlk, err := p.GetFinalizedBlock(p.headBlock)
 	if err != nil {
 		return fmt.Errorf("failed to get finalized block: %w", err)
 	}
-	r.logger.Info("retrieved fianlized block", zap.Stringer("finalized_block", finalizedBlk))
+	p.logger.Info("retrieved finalized and head block",
+		zap.Stringer("finalized_block", finalizedBlk),
+		zap.Stringer("head_block", p.headBlock),
+	)
 
-	return bp.Run(ctx, r.startBlockNum, finalizedBlk)
+	return bp.Run(ctx, p.startBlockNum, finalizedBlk)
 }
 
-func (r *Reader) GetFinalizedBlock() (bstream.BlockRef, error) {
+func (p *Poller) GetFinalizedBlock(headBlock bstream.BlockRef) (bstream.BlockRef, error) {
+	finalizedBlockNum := int64(headBlock.Num() - pbbitcoin.LibOffset)
+	finalizedBlockHash, err := p.rpcClient.GetBlockHash(finalizedBlockNum)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get finalized block hash: %w", err)
+	}
 
-	bestBlockHash, err := r.rpcClient.GetBestBlockHash()
+	return bstream.NewBlockRef(finalizedBlockHash.String(), uint64(finalizedBlockNum)), nil
+}
+
+func (p *Poller) GetHeadBlock() (bstream.BlockRef, error) {
+	bestBlockHash, err := p.rpcClient.GetBestBlockHash()
 	if err != nil {
 		return nil, fmt.Errorf("unable to get best block hash: %w", err)
 	}
-	r.logger.Info("found best block hash", zap.Stringer("blockhash", bestBlockHash))
+	p.logger.Info("found best block hash", zap.Stringer("blockhash", bestBlockHash))
 
-	bestBlock, err := r.rpcClient.GetBlockVerbose(bestBlockHash)
+	bestBlock, err := p.rpcClient.GetBlockVerbose(bestBlockHash)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get best block %s: %w", bestBlockHash.String(), err)
 	}
@@ -91,19 +120,38 @@ func (r *Reader) GetFinalizedBlock() (bstream.BlockRef, error) {
 	return bstream.NewBlockRef(bestBlockHash.String(), uint64(bestBlock.Height)), nil
 }
 
-func (r *Reader) Fetch(_ context.Context, blkNum uint64) (*pbbstream.Block, error) {
-	r.logger.Debug("fetching block", zap.Uint64("block_num", blkNum))
-	blkHash, err := r.rpcClient.GetBlockHash(int64(blkNum))
+func (p *Poller) Fetch(_ context.Context, blkNum uint64) (*pbbstream.Block, error) {
+	for p.headBlock.Num() < blkNum {
+		var err error
+		p.headBlock, err = p.GetHeadBlock()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get head block: %w", err)
+		}
+
+		if p.headBlock.Num() < blkNum {
+			p.logger.Info("head block is behind, waiting for it to catch up",
+				zap.Stringer("head_block", p.headBlock),
+				zap.Uint64("block_num", blkNum),
+				zap.Duration("wait_duration", p.blockInterval),
+			)
+			time.Sleep(p.blockInterval)
+			continue
+		}
+		break
+	}
+
+	p.logger.Debug("fetching block", zap.Uint64("block_num", blkNum))
+	blkHash, err := p.rpcClient.GetBlockHash(int64(blkNum))
 	if err != nil {
 		return nil, fmt.Errorf("unable to get block hash for block %d: %w", blkNum, err)
 	}
 
-	rpcBlk, err := r.rpcClient.GetBlockVerboseTx(blkHash)
+	rpcBlk, err := p.rpcClient.GetBlockVerboseTx(blkHash)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get block %d (%s): %w", blkNum, blkHash.String(), err)
 	}
 
-	r.logger.Debug("found block",
+	p.logger.Debug("found block",
 		zap.Int64("block_num", rpcBlk.Height),
 		zap.String("block_hash", rpcBlk.Hash),
 		zap.String("prev_hash", rpcBlk.PreviousHash),

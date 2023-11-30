@@ -12,8 +12,8 @@ import (
 	"go.uber.org/zap"
 )
 
-var readerCmd = &cobra.Command{
-	Use:          "reader <start-block>",
+var pollerCmd = &cobra.Command{
+	Use:          "poller <start-block>",
 	Short:        "launches the RPC reader",
 	SilenceUsage: true,
 	RunE:         readerRunE,
@@ -21,12 +21,13 @@ var readerCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(readerCmd)
-	readerCmd.Flags().String("rpc-endpoint", "http://localhost:8333", "The bitcoin RPC node")
-	readerCmd.Flags().Uint64("block-fetch-retry-count", 3, "The number of times to retry fetching a block before ending in error")
-	readerCmd.Flags().String("reader-state-storage-path", "/localdata/", "The local path where the reader state will be stored, if blank no state will be stored")
-	readerCmd.Flags().Duration("graceful-shutdown-delay", 0*time.Millisecond, "delay before shutting down, after the health endpoint returns unhealthy")
-	readerCmd.Flags().Duration("unready-period-delay", 0*time.Millisecond, "the delay starting the shutdown sequence after the health endpoint returns unhealthy")
+	rootCmd.AddCommand(pollerCmd)
+	pollerCmd.Flags().String("rpc-endpoint", "http://localhost:8333", "The bitcoin RPC node")
+	pollerCmd.Flags().Bool("ignore-cursor", false, "When enable it will ignore the cursor and start from the start block num, the cursor will still be saved as the poller progresses")
+	pollerCmd.Flags().Uint64("block-fetch-retry-count", 3, "The number of times to retry fetching a block before ending in error")
+	pollerCmd.Flags().String("reader-state-storage-path", "/localdata/", "The local path where the reader state will be stored, if blank no state will be stored")
+	pollerCmd.Flags().Duration("graceful-shutdown-delay", 0*time.Millisecond, "delay before shutting down, after the health endpoint returns unhealthy")
+	pollerCmd.Flags().Duration("unready-period-delay", 0*time.Millisecond, "the delay starting the shutdown sequence after the health endpoint returns unhealthy")
 }
 
 func readerRunE(cmd *cobra.Command, args []string) error {
@@ -38,6 +39,7 @@ func readerRunE(cmd *cobra.Command, args []string) error {
 	readerStateStoragePath := sflags.MustGetString(cmd, "reader-state-storage-path")
 	gracefulShutdownDelay := sflags.MustGetDuration(cmd, "graceful-shutdown-delay")
 	unreadyPeriodDelay := sflags.MustGetDuration(cmd, "unready-period-delay")
+	ignoreCursor := sflags.MustGetBool(cmd, "ignore-cursor")
 
 	zlog.Info("launching firebtc reader",
 		zap.String("start_block_num", startBlockNumStr),
@@ -46,6 +48,7 @@ func readerRunE(cmd *cobra.Command, args []string) error {
 		zap.String("reader_state_storage_path", readerStateStoragePath),
 		zap.Duration("graceful_shutdown_delay", gracefulShutdownDelay),
 		zap.Duration("unready_period_delay", unreadyPeriodDelay),
+		zap.Bool("ignore_cursor", ignoreCursor),
 	)
 
 	startBlockNum, err := strconv.ParseUint(startBlockNumStr, 10, 64)
@@ -53,9 +56,9 @@ func readerRunE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unable to parse start block number %s: %w", startBlockNumStr, err)
 	}
 
-	r := poller.New(rpcEndpoint, blockFetchRetryCount, readerStateStoragePath, startBlockNum, zlog)
+	p := poller.New(rpcEndpoint, blockFetchRetryCount, readerStateStoragePath, startBlockNum, ignoreCursor, zlog)
 	app := cli.NewApplication(ctx)
-	app.SuperviseAndStart(r)
+	app.SuperviseAndStart(p)
 
 	return app.WaitForTermination(zlog, unreadyPeriodDelay, gracefulShutdownDelay)
 }
