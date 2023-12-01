@@ -89,7 +89,7 @@ func (p *Poller) Run(ctx context.Context) error {
 	}
 	p.logger.Info("retrieved finalized and head block",
 		zap.Stringer("finalized_block", finalizedBlk),
-		zap.Stringer("head_block", p.headBlock),
+		zap.Stringer("chain_head_block", p.headBlock),
 	)
 
 	return bp.Run(ctx, p.startBlockNum, finalizedBlk)
@@ -141,11 +141,14 @@ func (p *Poller) Fetch(_ context.Context, blkNum uint64) (*pbbstream.Block, erro
 	}
 
 	p.logger.Debug("fetching block", zap.Uint64("block_num", blkNum))
+	t0 := time.Now()
 	blkHash, err := p.rpcClient.GetBlockHash(int64(blkNum))
 	if err != nil {
 		return nil, fmt.Errorf("unable to get block hash for block %d: %w", blkNum, err)
 	}
+	duration := time.Since(t0)
 
+	t1 := time.Now()
 	rpcBlk, err := p.rpcClient.GetBlockVerboseTx(blkHash)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get block %d (%s): %w", blkNum, blkHash.String(), err)
@@ -155,6 +158,9 @@ func (p *Poller) Fetch(_ context.Context, blkNum uint64) (*pbbstream.Block, erro
 		zap.Int64("block_num", rpcBlk.Height),
 		zap.String("block_hash", rpcBlk.Hash),
 		zap.String("prev_hash", rpcBlk.PreviousHash),
+		zap.Duration("blockhash_duration", duration),
+		zap.Duration("block_duration", time.Since(t1)),
+		zap.Duration("total_duration", time.Since(t0)),
 	)
 
 	blk := &pbbitcoin.Block{
