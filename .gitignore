@@ -7,3 +7,4 @@
 /localdata
 *.spkg
 /build
+/dist
