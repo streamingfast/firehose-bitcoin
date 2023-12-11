@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/protobuf/types/known/anypb"
+
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/streamingfast/bstream"
 	pbbstream "github.com/streamingfast/bstream/pb/sf/bstream/v1"
@@ -237,10 +239,11 @@ func (p *Poller) Fetch(_ context.Context, blkNum uint64) (*pbbstream.Block, erro
 		blk.Tx = append(blk.Tx, trx)
 	}
 
+	anypb.New()
 	return blk.MustToBstreamBlock(), nil
 }
 
 func getContentType() string {
 	blk := &pbbitcoin.Block{}
-	return string(blk.ProtoReflect().Descriptor().FullName())
+	return "type.googleapis.com/" + string(blk.ProtoReflect().Descriptor().FullName())
 }
