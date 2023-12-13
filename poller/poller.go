@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"google.golang.org/protobuf/types/known/anypb"
-
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/streamingfast/bstream"
 	pbbstream "github.com/streamingfast/bstream/pb/sf/bstream/v1"
@@ -27,9 +25,20 @@ type Poller struct {
 	headBlock            bstream.BlockRef
 	rpcClient            *rpcclient.Client
 	logger               *zap.Logger
+
+	headers    map[string]string
+	disableTLS bool
 }
 
-func New(endpoint string, blockFetchRetryCount uint64, stateStoragePath string, startBlockNum uint64, ignoreCursor bool, logger *zap.Logger) *Poller {
+func New(
+	endpoint string,
+	https bool,
+	blockFetchRetryCount uint64,
+	stateStoragePath string,
+	startBlockNum uint64,
+	ignoreCursor bool,
+	headers map[string]string,
+	logger *zap.Logger) *Poller {
 	return &Poller{
 		Shutter:              shutter.New(),
 		endpoint:             endpoint,
@@ -38,6 +47,8 @@ func New(endpoint string, blockFetchRetryCount uint64, stateStoragePath string, 
 		startBlockNum:        startBlockNum,
 		ignoreCursor:         ignoreCursor,
 		blockInterval:        7 * time.Minute,
+		disableTLS:           !https,
+		headers:              headers,
 		logger:               logger.Named("poller"),
 	}
 }
@@ -70,7 +81,8 @@ func (p *Poller) Run(ctx context.Context) error {
 		Host:         p.endpoint,
 		DisableAuth:  true,
 		HTTPPostMode: true,
-		DisableTLS:   true,
+		DisableTLS:   p.disableTLS,
+		ExtraHeaders: p.headers,
 	}
 
 	client, err := rpcclient.New(connCfg, nil)
@@ -239,7 +251,6 @@ func (p *Poller) Fetch(_ context.Context, blkNum uint64) (*pbbstream.Block, erro
 		blk.Tx = append(blk.Tx, trx)
 	}
 
-	anypb.New()
 	return blk.MustToBstreamBlock(), nil
 }
 
