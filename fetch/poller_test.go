@@ -1,4 +1,4 @@
-package poller
+package fetch
 
 import (
 	"fmt"
@@ -26,7 +26,7 @@ func TestNew(t *testing.T) {
 	client, err := rpcclient.New(connCfg, nil)
 	require.NoError(t, err)
 
-	r := &Poller{
+	r := &BlockFetcher{
 		rpcClient: client,
 		logger:    zap.NewNop(),
 	}

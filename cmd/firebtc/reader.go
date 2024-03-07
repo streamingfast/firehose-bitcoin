@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/streamingfast/firehose-bitcoin/fetch"
 	"strconv"
 	"strings"
 	"time"
@@ -9,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/streamingfast/cli"
 	"github.com/streamingfast/cli/sflags"
-	"github.com/streamingfast/firehose-bitcoin/poller"
 	"go.uber.org/zap"
 )
 
@@ -73,7 +73,7 @@ func readerRunE(cmd *cobra.Command, args []string) error {
 		rpcEndpoint = strings.TrimPrefix(rpcEndpoint, "http://")
 	}
 
-	p := poller.New(rpcEndpoint, https, blockFetchRetryCount, readerStateStoragePath, startBlockNum, ignoreCursor, headers, zlog)
+	p := fetch.New(rpcEndpoint, https, blockFetchRetryCount, readerStateStoragePath, startBlockNum, ignoreCursor, headers, zlog)
 	app := cli.NewApplication(ctx)
 	app.SuperviseAndStart(p)
 

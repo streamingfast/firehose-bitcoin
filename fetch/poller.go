@@ -1,4 +1,4 @@
-package poller
+package fetch
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type Poller struct {
+type BlockFetcher struct {
 	*shutter.Shutter
 	endpoint             string
 	blockFetchRetryCount uint64
@@ -38,8 +38,8 @@ func New(
 	startBlockNum uint64,
 	ignoreCursor bool,
 	headers map[string]string,
-	logger *zap.Logger) *Poller {
-	return &Poller{
+	logger *zap.Logger) *BlockFetcher {
+	return &BlockFetcher{
 		Shutter:              shutter.New(),
 		endpoint:             endpoint,
 		blockFetchRetryCount: blockFetchRetryCount,
@@ -53,7 +53,7 @@ func New(
 	}
 }
 
-func (p *Poller) Run(ctx context.Context) error {
+func (p *BlockFetcher) Run(ctx context.Context) error {
 	contentType := getContentType()
 	p.logger.Info("launching firebtc poller",
 		zap.String("endpoint", p.endpoint),
@@ -106,10 +106,10 @@ func (p *Poller) Run(ctx context.Context) error {
 		zap.Stringer("chain_head_block", p.headBlock),
 	)
 
-	return bp.Run(ctx, p.startBlockNum, finalizedBlk)
+	return bp.Run(ctx, p.startBlockNum, 1)
 }
 
-func (p *Poller) GetFinalizedBlock(headBlock bstream.BlockRef) (bstream.BlockRef, error) {
+func (p *BlockFetcher) GetFinalizedBlock(headBlock bstream.BlockRef) (bstream.BlockRef, error) {
 	finalizedBlockNum := int64(headBlock.Num() - pbbitcoin.LibOffset)
 	finalizedBlockHash, err := p.rpcClient.GetBlockHash(finalizedBlockNum)
 	if err != nil {
@@ -119,7 +119,7 @@ func (p *Poller) GetFinalizedBlock(headBlock bstream.BlockRef) (bstream.BlockRef
 	return bstream.NewBlockRef(finalizedBlockHash.String(), uint64(finalizedBlockNum)), nil
 }
 
-func (p *Poller) GetHeadBlock() (bstream.BlockRef, error) {
+func (p *BlockFetcher) GetHeadBlock() (bstream.BlockRef, error) {
 	bestBlockHash, err := p.rpcClient.GetBestBlockHash()
 	if err != nil {
 		return nil, fmt.Errorf("unable to get best block hash: %w", err)
@@ -134,12 +134,16 @@ func (p *Poller) GetHeadBlock() (bstream.BlockRef, error) {
 	return bstream.NewBlockRef(bestBlockHash.String(), uint64(bestBlock.Height)), nil
 }
 
-func (p *Poller) Fetch(_ context.Context, blkNum uint64) (*pbbstream.Block, error) {
+func (p *BlockFetcher) IsBlockAvailable(requestedSlot uint64) bool {
+	return requestedSlot <= p.headBlock.Num()
+}
+
+func (p *BlockFetcher) Fetch(_ context.Context, blkNum uint64) (*pbbstream.Block, bool, error) {
 	for p.headBlock.Num() < blkNum {
 		var err error
 		p.headBlock, err = p.GetHeadBlock()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get head block: %w", err)
+			return nil, false, fmt.Errorf("failed to get head block: %w", err)
 		}
 
 		if p.headBlock.Num() < blkNum {
@@ -158,14 +162,14 @@ func (p *Poller) Fetch(_ context.Context, blkNum uint64) (*pbbstream.Block, erro
 	t0 := time.Now()
 	blkHash, err := p.rpcClient.GetBlockHash(int64(blkNum))
 	if err != nil {
-		return nil, fmt.Errorf("unable to get block hash for block %d: %w", blkNum, err)
+		return nil, false, fmt.Errorf("unable to get block hash for block %d: %w", blkNum, err)
 	}
 	duration := time.Since(t0)
 
 	t1 := time.Now()
 	rpcBlk, err := p.rpcClient.GetBlockVerboseTx(blkHash)
 	if err != nil {
-		return nil, fmt.Errorf("unable to get block %d (%s): %w", blkNum, blkHash.String(), err)
+		return nil, false, fmt.Errorf("unable to get block %d (%s): %w", blkNum, blkHash.String(), err)
 	}
 
 	p.logger.Debug("found block",
@@ -251,7 +255,7 @@ func (p *Poller) Fetch(_ context.Context, blkNum uint64) (*pbbstream.Block, erro
 		blk.Tx = append(blk.Tx, trx)
 	}
 
-	return blk.MustToBstreamBlock(), nil
+	return blk.MustToBstreamBlock(), false, nil
 }
 
 func getContentType() string {
