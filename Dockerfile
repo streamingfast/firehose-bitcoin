@@ -1,4 +1,4 @@
-ARG CORE_VERSION=b2cf970
+ARG CORE_VERSION=v1.2.4
 
 FROM golang:1.21-alpine as build
 WORKDIR /app
