@@ -140,12 +140,12 @@ func (p *BlockFetcher) IsBlockAvailable(requestedSlot uint64) bool {
 
 func (p *BlockFetcher) Fetch(_ context.Context, blkNum uint64) (*pbbstream.Block, bool, error) {
 	for p.headBlock.Num() < blkNum {
-		var err error
-		p.headBlock, err = p.GetHeadBlock()
+		headblock, err := p.GetHeadBlock()
 		if err != nil {
 			return nil, false, fmt.Errorf("failed to get head block: %w", err)
 		}
 
+		p.headBlock = headblock
 		if p.headBlock.Num() < blkNum {
 			p.logger.Info("head block is behind, waiting for it to catch up",
 				zap.Stringer("head_block", p.headBlock),
