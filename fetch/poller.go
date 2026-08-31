@@ -2,7 +2,9 @@ package fetch
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/btcsuite/btcd/rpcclient"
@@ -27,7 +29,7 @@ type BlockFetcher struct {
 	stateStoragePath     string
 	startBlockNum        uint64
 	ignoreCursor         bool
-	blockInterval        time.Duration
+	headBlockWaitTimeout time.Duration
 	headBlock            bstream.BlockRef
 	rpcClient            *rpcclient.Client
 	logger               *zap.Logger
@@ -43,6 +45,7 @@ func New(
 	stateStoragePath string,
 	startBlockNum uint64,
 	ignoreCursor bool,
+	headBlockWaitTimeout time.Duration,
 	headers map[string]string,
 	logger *zap.Logger) *BlockFetcher {
 	return &BlockFetcher{
@@ -52,7 +55,7 @@ func New(
 		stateStoragePath:     stateStoragePath,
 		startBlockNum:        startBlockNum,
 		ignoreCursor:         ignoreCursor,
-		blockInterval:        7 * time.Minute,
+		headBlockWaitTimeout: headBlockWaitTimeout,
 		disableTLS:           !https,
 		headers:              headers,
 		logger:               logger.Named("poller"),
@@ -151,28 +154,75 @@ func (p *BlockFetcher) getHeadBlock(client *rpcclient.Client) (bstream.BlockRef,
 	return bstream.NewBlockRef(bestBlockHash.String(), uint64(bestBlock.Height)), nil
 }
 
+// awaitBlockHeight waits for the node to reach height and returns its head block. Any failure —
+// a node without waitforblockheight (Bitcoin Core before 0.12), a proxy cutting the long-lived
+// request — falls back to sleep-polling.
+func (p *BlockFetcher) awaitBlockHeight(height uint64) (bstream.BlockRef, error) {
+	headBlock, err := p.waitForBlockHeight(height)
+	if err == nil {
+		return headBlock, nil
+	}
+	p.logger.Debug("unable to wait on the node, polling the head block instead", zap.Error(err))
+
+	headBlock, err = p.GetHeadBlock()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get head block: %w", err)
+	}
+	if headBlock.Num() < height {
+		time.Sleep(p.headBlockWaitTimeout)
+	}
+
+	return headBlock, nil
+}
+
+// waitForBlockHeight blocks on the node until it reaches height, and returns its head block as soon
+// as it does. On timeout it returns the head the node is still on, leaving the caller to wait again.
+func (p *BlockFetcher) waitForBlockHeight(height uint64) (bstream.BlockRef, error) {
+	params := []json.RawMessage{
+		json.RawMessage(strconv.FormatUint(height, 10)),
+		json.RawMessage(strconv.FormatInt(p.headBlockWaitTimeout.Milliseconds(), 10)),
+	}
+
+	raw, err := p.rpcClient.RawRequest("waitforblockheight", params)
+	if err != nil {
+		return nil, fmt.Errorf("unable to wait for block height %d: %w", height, err)
+	}
+
+	var result struct {
+		Hash   string `json:"hash"`
+		Height uint64 `json:"height"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("unable to decode waitforblockheight response: %w", err)
+	}
+	if result.Hash == "" {
+		return nil, fmt.Errorf("node returned no block hash waiting for height %d", height)
+	}
+
+	return bstream.NewBlockRef(result.Hash, result.Height), nil
+}
+
 func (p *BlockFetcher) IsBlockAvailable(requestedSlot uint64) bool {
 	return requestedSlot <= p.headBlock.Num()
 }
 
-func (p *BlockFetcher) Fetch(_ context.Context, client *rpcclient.Client, blkNum uint64) (*pbbstream.Block, bool, error) {
+func (p *BlockFetcher) Fetch(ctx context.Context, client *rpcclient.Client, blkNum uint64) (*pbbstream.Block, bool, error) {
 	for p.headBlock.Num() < blkNum {
-		headblock, err := p.getHeadBlock(client)
-		if err != nil {
-			return nil, false, fmt.Errorf("failed to get head block: %w", err)
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
 		}
 
-		p.headBlock = headblock
-		if p.headBlock.Num() < blkNum {
-			p.logger.Info("head block is behind, waiting for it to catch up",
-				zap.Stringer("head_block", p.headBlock),
-				zap.Uint64("block_num", blkNum),
-				zap.Duration("wait_duration", p.blockInterval),
-			)
-			time.Sleep(p.blockInterval)
-			continue
+		p.logger.Debug("head block is behind, waiting for it to catch up",
+			zap.Stringer("head_block", p.headBlock),
+			zap.Uint64("block_num", blkNum),
+			zap.Duration("wait_timeout", p.headBlockWaitTimeout),
+		)
+
+		headBlock, err := p.awaitBlockHeight(blkNum)
+		if err != nil {
+			return nil, false, err
 		}
-		break
+		p.headBlock = headBlock
 	}
 
 	p.logger.Debug("fetching block", zap.Uint64("block_num", blkNum))

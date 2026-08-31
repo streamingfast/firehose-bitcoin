@@ -26,6 +26,7 @@ func init() {
 	pollerCmd.Flags().String("rpc-endpoint", "http://localhost:8333", "The bitcoin RPC node")
 	pollerCmd.Flags().Bool("ignore-cursor", false, "When enable it will ignore the cursor and start from the start block num, the cursor will still be saved as the poller progresses")
 	pollerCmd.Flags().Uint64("block-fetch-retry-count", 3, "The number of times to retry fetching a block before ending in error")
+	pollerCmd.Flags().Duration("head-block-wait-timeout", 30*time.Second, "How long a single waitforblockheight call may block on the node before it is retried")
 	pollerCmd.Flags().String("reader-state-storage-path", "/localdata/", "The local path where the reader state will be stored, if blank no state will be stored")
 	pollerCmd.Flags().StringSliceP("headers", "H", nil, "List of HTTP headers to pass with the request (ex: 'Authorization: Basic ...')")
 	pollerCmd.Flags().Duration("graceful-shutdown-delay", 0*time.Millisecond, "delay before shutting down, after the health endpoint returns unhealthy")
@@ -43,6 +44,7 @@ func readerRunE(cmd *cobra.Command, args []string) error {
 	gracefulShutdownDelay := sflags.MustGetDuration(cmd, "graceful-shutdown-delay")
 	unreadyPeriodDelay := sflags.MustGetDuration(cmd, "unready-period-delay")
 	ignoreCursor := sflags.MustGetBool(cmd, "ignore-cursor")
+	headBlockWaitTimeout := sflags.MustGetDuration(cmd, "head-block-wait-timeout")
 
 	zlog.Info("launching firebtc reader",
 		zap.String("start_block_num", startBlockNumStr),
@@ -53,6 +55,7 @@ func readerRunE(cmd *cobra.Command, args []string) error {
 		zap.Duration("graceful_shutdown_delay", gracefulShutdownDelay),
 		zap.Duration("unready_period_delay", unreadyPeriodDelay),
 		zap.Bool("ignore_cursor", ignoreCursor),
+		zap.Duration("head_block_wait_timeout", headBlockWaitTimeout),
 	)
 
 	startBlockNum, err := strconv.ParseUint(startBlockNumStr, 10, 64)
@@ -73,7 +76,7 @@ func readerRunE(cmd *cobra.Command, args []string) error {
 		rpcEndpoint = strings.TrimPrefix(rpcEndpoint, "http://")
 	}
 
-	p := fetch.New(rpcEndpoint, https, blockFetchRetryCount, readerStateStoragePath, startBlockNum, ignoreCursor, headers, zlog)
+	p := fetch.New(rpcEndpoint, https, blockFetchRetryCount, readerStateStoragePath, startBlockNum, ignoreCursor, headBlockWaitTimeout, headers, zlog)
 	app := cli.NewApplication(ctx)
 	app.SuperviseAndStart(p)
 
