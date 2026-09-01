@@ -6,9 +6,17 @@ for instructions to keep up to date.
 
 ## Unreleased
 
+### Added
+
+* added flag `--head-block-wait-timeout` (default 30s) to bound a single `waitforblockheight` call
+
 ### Changed
 
 * bumped `firehose-core` to v1.18.0, which requires Go 1.26 to build
+
+### Fixed
+
+* replaced the hardcoded 7 minute sleep between head block checks with `waitforblockheight`, falling back to polling when it fails
 
 ## v1.0.0
 
