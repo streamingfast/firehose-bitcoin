@@ -1,6 +1,6 @@
-ARG CORE_VERSION=v1.2.4
+ARG CORE_VERSION=v1.18.0
 
-FROM golang:1.22-alpine as build
+FROM golang:1.26-alpine as build
 WORKDIR /app
 
 COPY go.mod go.sum ./
