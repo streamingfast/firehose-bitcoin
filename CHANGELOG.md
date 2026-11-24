@@ -4,6 +4,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). See [MAINTAINERS.md](./MAINTAINERS.md)
 for instructions to keep up to date.
 
+## v1.1.2
+
+### Changed
+
+* Bump `firehose-core` base image to `v1.21.2` in `Dockerfile`.
+* Move release process to the sfreleaser draft/publish workflows (`.sfreleaser` now uses the `application` variant with the `native` builder).
+
+### Security
+
+* Scan the Docker image with Docker Scout (critical/high) before publishing the `develop`, version and `latest` tags.
+* Bump vulnerable Go dependencies (`grpc`, `otel/sdk`, `otel/trace`, `klauspost/compress`, `x/net`, `x/crypto`, `go-jose`) flagged by `govulncheck`.
+
 ## v1.1.1
 
 ### Fixed

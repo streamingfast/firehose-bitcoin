@@ -2,3 +2,5 @@ global:
   binary: firebtc
   language: golang
   variant: application
+release:
+  builder: native
