@@ -9,7 +9,7 @@ for instructions to keep up to date.
 ### Changed
 
 * Bump `firehose-core` base image to `v1.21.2` in `Dockerfile`.
-* Bump vulnerable Go dependencies (`grpc`, `otel/sdk`, `otel/trace`, `klauspost/compress`, `x/net`, `x/crypto`) flagged by `govulncheck`.
+* Bump vulnerable Go dependencies (`grpc`, `otel/sdk`, `otel/trace`, `klauspost/compress`, `x/net`, `x/crypto`, `go-jose`) flagged by `govulncheck`.
 * Move release process to the sfreleaser draft/publish workflows (`.sfreleaser` now uses the `application` variant with the `native` builder).
 
 ### Security
