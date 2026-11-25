@@ -4,6 +4,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html). See [MAINTAINERS.md](./MAINTAINERS.md)
 for instructions to keep up to date.
 
+## Unreleased
+
+### Security
+
+* Docker image release tags (`develop`, version, `latest`) are now promoted by the image scan gate (`promote-tags`) only after a clean scan, a vulnerable image can no longer ship under them.
+
 ## v1.1.2
 
 ### Changed
