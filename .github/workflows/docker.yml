@@ -49,10 +49,7 @@ jobs:
         run: |
           echo "REPO_NAME=$(basename ${{ github.repository }})" >> $GITHUB_ENV
 
-      - name: Get short SHA
-        id: sha
-        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-
+      # Release and moving tags (and labels), promoted by the scan gate once the image is clean
       - name: Generate docker tags/labels from github build context
         id: meta
         uses: docker/metadata-action@v6
@@ -65,33 +62,32 @@ jobs:
           flavor: |
             latest=${{ startsWith(github.ref, 'refs/tags/') }}
 
+      # The immutable commit tag only, it is the one pushed by the build and scanned by the gate
+      - name: Generate immutable commit tag
+        id: sha
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: type=sha,prefix=
+          flavor: latest=false
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
         with:
           file: ./Dockerfile
           push: true
-          # Only the short SHA tag is pushed here, the other tags are published after the image scan passes
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.sha.outputs.short }}
+          # Only the commit tag is pushed here, the other tags are promoted by the gate after a clean scan
+          tags: ${{ steps.sha.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Scan the image
         uses: streamingfast/actions/image-scan/gate@v1
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.sha.outputs.short }}
+          image: ${{ steps.sha.outputs.tags }}
+          promote-tags: ${{ steps.meta.outputs.tags }}
           dockerhub-user: ${{ secrets.DOCKER_SCOUT_USER }}
           dockerhub-password: ${{ secrets.DOCKER_SCOUT_PASSWORD }}
           severities: critical,high
-
-      - name: Publish remaining tags
-        env:
-          SOURCE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.sha.outputs.short }}
-          TAGS: ${{ steps.meta.outputs.tags }}
-        run: |
-          for tag in $TAGS; do
-            if [[ "$tag" != "$SOURCE" ]]; then
-              docker buildx imagetools create --tag "$tag" "$SOURCE"
-            fi
-          done
 
   slack-notifications:
     if: ${{ !startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch' }}
